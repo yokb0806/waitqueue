@@ -10,16 +10,18 @@
         @keyframes blinkingBackground { 0% { background-color: #fee2e2; } 50% { background-color: #fca5a5; } 100% { background-color: #fee2e2; } }
         .touch-action-manipulation { touch-action: manipulation; }
     </style>
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore-compat.js"></script>
+    <!-- 安定動作のためのFirebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 </head>
 <body class="bg-gray-100 text-gray-800 font-sans min-h-screen touch-action-manipulation">
 
-    <div id="error-banner" class="hidden bg-red-600 text-white p-4 text-left font-bold sticky top-0 z-50 text-sm break-words"></div>
+    <div id="error-banner" class="hidden bg-red-600 text-white p-4 text-center font-bold sticky top-0 z-50 text-sm break-words"></div>
 
     <main class="max-w-xl mx-auto min-h-screen flex flex-col" id="app-container">
         
+        <!-- ================= 1. 起動画面 (店舗ID入力) ================= -->
         <div id="view-init" class="flex-1 flex flex-col justify-center p-6 space-y-6">
             <div class="bg-white p-8 rounded-2xl shadow-lg text-center space-y-6">
                 <h1 class="text-2xl font-bold text-gray-800">システム起動</h1>
@@ -33,13 +35,14 @@
             </div>
         </div>
 
+        <!-- ================= 2. タブレット基本画面 ================= -->
         <div id="view-tablet-home" class="hidden flex-1 flex flex-col">
             <div class="flex-1 flex flex-col items-center justify-center p-6 space-y-8 relative">
                 <div class="absolute top-4 right-4 flex flex-col gap-2">
                     <button onclick="changeView('tablet-admin')" class="bg-gray-200 text-gray-600 px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-gray-300">
                         管理画面
                     </button>
-                    <button onclick="changeView('customer')" class="bg-green-100 text-green-700 px-4 py-2 rounded-lg text-xs font-bold shadow hover:bg-green-200">
+                    <button onclick="openCustomerTestView()" class="bg-green-100 text-green-700 px-4 py-2 rounded-lg text-xs font-bold shadow hover:bg-green-200">
                         お客様画面を<br>テストで開く
                     </button>
                 </div>
@@ -59,10 +62,11 @@
                 </div>
             </div>
             <div class="text-center pb-8">
-                <button onclick="changeView('init')" class="text-gray-400 text-xs underline">店舗コード入力に戻る</button>
+                <button onclick="backToInit()" class="text-gray-400 text-xs underline">店舗コード入力に戻る</button>
             </div>
         </div>
 
+        <!-- ================= 3. タブレット管理画面 ================= -->
         <div id="view-tablet-admin" class="hidden flex-1 flex flex-col bg-gray-50">
             <div class="bg-gray-800 text-white p-4 flex justify-between items-center shadow-md sticky top-0 z-10">
                 <h2 class="text-xl font-bold">管理画面</h2>
@@ -82,6 +86,7 @@
             </div>
         </div>
 
+        <!-- ================= 4. お客様画面 ================= -->
         <div id="view-customer" class="hidden flex-1 flex flex-col p-4 space-y-6">
             <div id="customer-form-section" class="bg-white p-6 rounded-2xl shadow-md space-y-6 hidden mt-4">
                 <div class="text-center">
@@ -132,7 +137,7 @@
                 </div>
             </div>
             <div class="text-center pb-8">
-                <button onclick="changeView('tablet-home')" class="text-gray-400 text-xs underline">（テスト用）タブレット画面に戻る</button>
+                <button onclick="backToHome()" class="text-gray-400 text-xs underline">（テスト用）タブレット画面に戻る</button>
             </div>
         </div>
     </main>
@@ -190,12 +195,37 @@
         };
 
         window.startSystem = () => {
-            if(!auth || !db) return alert("データベースが設定されていません");
+            if(!auth || !db) return alert("データベースが初期化されていません。リロードしてください。");
             const input = document.getElementById('store-id-input').value.trim();
-            if (!input) return alert("店舗コード（6桁）を入力してください。");
+            if (!input || input.length !== 6 || isNaN(input)) {
+                return alert("店舗コードは半角数字6桁で入力してください。");
+            }
+            
             state.storeId = input;
+            
+            showLoading();
             startQueueListener();
             changeView('tablet-home');
+            hideLoading();
+        };
+
+        window.backToInit = () => {
+            if (unsubQueue) {
+                unsubQueue();
+                unsubQueue = null;
+            }
+            state.storeId = null;
+            state.queue = [];
+            document.getElementById('store-id-input').value = "";
+            changeView('init');
+        };
+
+        window.backToHome = () => {
+            changeView('tablet-home');
+        };
+
+        window.openCustomerTestView = () => {
+            changeView('customer');
         };
 
         window.submitTicket = async (e) => {
@@ -373,11 +403,12 @@
                     }
                 });
                 state.queue.sort((a, b) => a.createdAt - b.createdAt);
+                
+                document.getElementById('error-banner').classList.add('hidden');
                 if(state.isReady) renderView();
             }, (error) => {
                 console.error("Firestore Error:", error);
-                // エラーの詳細な理由（英語）を画面に出すように修正
-                showError(`読込エラー: ${error.message}`);
+                showError(`エラーが発生しました: ${error.message}`);
             });
         };
 
@@ -386,4 +417,31 @@
             try {
                 showLoading();
                 await auth.signInAnonymously();
-       
+                auth.onAuthStateChanged((user) => {
+                    if (user) {
+                        if (paramStoreId && paramView === 'customer') {
+                            state.storeId = paramStoreId;
+                            state.view = 'customer';
+                            startQueueListener();
+                        } else {
+                            state.view = 'init';
+                        }
+                        state.isReady = true;
+                        hideLoading();
+                        renderView();
+                    }
+                });
+            } catch (error) {
+                console.error("Init Error:", error);
+                hideLoading();
+                showError(`認証エラー: ${error.message}`);
+            }
+        };
+
+        window.onload = initApp;
+
+    </script>
+</body>
+</html>
+
+```
