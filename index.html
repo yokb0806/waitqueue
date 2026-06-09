@@ -10,6 +10,7 @@
         @keyframes blinkingBackground { 0% { background-color: #fee2e2; } 50% { background-color: #fca5a5; } 100% { background-color: #fee2e2; } }
         .touch-action-manipulation { touch-action: manipulation; }
     </style>
+    <!-- 安定動作のためのFirebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
@@ -20,6 +21,7 @@
 
     <main class="max-w-xl mx-auto min-h-screen flex flex-col" id="app-container">
         
+        <!-- ================= 1. 起動画面 (店舗ID入力) ================= -->
         <div id="view-init" class="flex-1 flex flex-col justify-center p-6 space-y-6">
             <div class="bg-white p-8 rounded-2xl shadow-lg text-center space-y-6">
                 <h1 class="text-2xl font-bold text-gray-800">システム起動</h1>
@@ -33,6 +35,7 @@
             </div>
         </div>
 
+        <!-- ================= 2. タブレット基本画面 ================= -->
         <div id="view-tablet-home" class="hidden flex-1 flex flex-col">
             <div class="flex-1 flex flex-col items-center justify-center p-6 space-y-8 relative">
                 <div class="absolute top-4 right-4 flex flex-col gap-2">
@@ -63,6 +66,7 @@
             </div>
         </div>
 
+        <!-- ================= 3. タブレット管理画面 ================= -->
         <div id="view-tablet-admin" class="hidden flex-1 flex flex-col bg-gray-50">
             <div class="bg-gray-800 text-white p-4 flex justify-between items-center shadow-md sticky top-0 z-10">
                 <h2 class="text-xl font-bold">管理画面</h2>
@@ -82,6 +86,7 @@
             </div>
         </div>
 
+        <!-- ================= 4. お客様画面 ================= -->
         <div id="view-customer" class="hidden flex-1 flex flex-col p-4 space-y-6">
             <div id="customer-form-section" class="bg-white p-6 rounded-2xl shadow-md space-y-6 hidden mt-4">
                 <div class="text-center">
@@ -131,7 +136,9 @@
                     <p class="text-gray-500 mb-8">ご利用ありがとうございました。</p>
                 </div>
             </div>
-            <div class="text-center pb-8">
+            
+            <!-- お客様がアクセスした場合には、タブレットに戻るテストボタンを非表示化 -->
+            <div id="back-to-home-wrapper" class="text-center pb-8 hidden">
                 <button onclick="backToHome()" class="text-gray-400 text-xs underline">（テスト用）タブレット画面に戻る</button>
             </div>
         </div>
@@ -271,6 +278,11 @@
         };
 
         const renderView = () => {
+            // お客様によるパラメータアクセス時には、不正遷移を防ぐため厳格にガード
+            if (paramStoreId && paramView === 'customer' && state.view !== 'customer') {
+                state.view = 'customer';
+            }
+
             ['view-init', 'view-tablet-home', 'view-tablet-admin', 'view-customer'].forEach(id => {
                 document.getElementById(id).classList.add('hidden');
             });
@@ -336,6 +348,14 @@
         const renderCustomerView = () => {
             const formSection = document.getElementById('customer-form-section');
             const statusSection = document.getElementById('customer-status-section');
+
+            // お客様のアクセス時にはテスト用戻るボタンを完全に隠蔽
+            const backToHomeWrapper = document.getElementById('back-to-home-wrapper');
+            if (paramStoreId && paramView === 'customer') {
+                backToHomeWrapper.classList.add('hidden');
+            } else {
+                backToHomeWrapper.classList.remove('hidden');
+            }
 
             if (!state.myTicketId) {
                 try {
