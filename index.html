@@ -25,9 +25,9 @@
         <div id="view-init" class="flex-1 flex flex-col justify-center p-6 space-y-6">
             <div class="bg-white p-8 rounded-2xl shadow-lg text-center space-y-6">
                 <h1 class="text-2xl font-bold text-gray-800">システム起動</h1>
-                <p class="text-sm text-gray-500">店舗コード（6桁）を入力して開始してください。</p>
+                <p class="text-sm text-gray-500">店舗コード（半角英数字6桁）を入力して開始してください。</p>
                 <div>
-                    <input type="text" id="store-id-input" placeholder="例: 123456" maxlength="6" class="w-full border-2 border-gray-300 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-blue-500 text-center">
+                    <input type="text" id="store-id-input" placeholder="例: a1b2c3" maxlength="6" class="w-full border-2 border-gray-300 rounded-xl px-4 py-3 text-lg focus:outline-none focus:border-blue-500 text-center">
                 </div>
                 <button onclick="startSystem()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow transition text-lg">
                     システム開始
@@ -202,8 +202,11 @@
         window.startSystem = () => {
             if(!auth || !db) return alert("データベースが初期化されていません。リロードしてください。");
             const input = document.getElementById('store-id-input').value.trim();
-            if (!input || input.length !== 6 || isNaN(input)) {
-                return alert("店舗コードは半角数字6桁で入力してください。");
+            
+            // 半角英数字6桁の正規表現チェック
+            const alphanumericRegex = /^[A-Za-z0-9]{6}$/;
+            if (!input || !alphanumericRegex.test(input)) {
+                return alert("店舗コードは半角英数字6桁で入力してください。");
             }
             
             state.storeId = input;
