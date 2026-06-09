@@ -150,17 +150,16 @@
 
     <script>
         // ==========================================
-const firebaseConfig = {
-  apiKey: \"AIzaSyBNR1sSqBuRQPCfkSCSOap_2ZXcHfXn4bI\",
-  authDomain: \"wait-queue-30cb9.firebaseapp.com\",
-  databaseURL: \"https://wait-queue-30cb9-default-rtdb.firebaseio.com\",
-  projectId: \"wait-queue-30cb9\",
-  storageBucket: \"wait-queue-30cb9.firebasestorage.app\",
-  messagingSenderId: \"797154972346\",
-  appId: \"1:797154972346:web:1aa6f9f6ead3b7a6f32883\",
-\",
-  measurementId: \"G-0BSPHPGFBY\"
-};
+        const firebaseConfig = {
+            apiKey: "AIzaSyBNR1sSqBuRQPCfkSCSOap_2ZXcHfXn4bI",
+            authDomain: "wait-queue-30cb9.firebaseapp.com",
+            databaseURL: "https://wait-queue-30cb9-default-rtdb.firebaseio.com",
+            projectId: "wait-queue-30cb9",
+            storageBucket: "wait-queue-30cb9.firebasestorage.app",
+            messagingSenderId: "797154972346",
+            appId: "1:797154972346:web:1aa6f9f6ead3b7a6f32883",
+            measurementId: "G-0BSPHPGFBY"
+        };
         // ==========================================
 
         const showError = (msg) => {
@@ -176,11 +175,8 @@ const firebaseConfig = {
             }
             auth = firebase.auth();
             db = firebase.firestore();
-            if(firebaseConfig.apiKey.includes("AIzaSy...")) {
-                showError("【警告】FirebaseのAPIキーが初期値(AIzaSy...)のままです。正しく書き換えてください。");
-            }
         } catch (e) {
-            showError("Firebaseの初期化に失敗しました。設定値を確認してください。");
+            showError("Firebaseの初期化に失敗しました。");
             console.error(e);
         }
 
@@ -384,4 +380,45 @@ const firebaseConfig = {
                         state.queue.push({ id: docSnap.id, ...data });
                     }
                 });
-                state.queue.sort((
+                state.queue.sort((a, b) => a.createdAt - b.createdAt);
+                if(state.isReady) renderView();
+            }, (error) => {
+                console.error("Firestore Error:", error);
+                showError("データの読み込みに失敗しました。");
+            });
+        };
+
+        const initApp = async () => {
+            if(!auth) return;
+            try {
+                showLoading();
+                await auth.signInAnonymously();
+                auth.onAuthStateChanged((user) => {
+                    if (user) {
+                        if (paramStoreId && paramView === 'customer') {
+                            state.storeId = paramStoreId;
+                            state.view = 'customer';
+                            startQueueListener();
+                        } else {
+                            state.view = 'init';
+                        }
+                        state.isReady = true;
+                        hideLoading();
+                        renderView();
+                    }
+                });
+            } catch (error) {
+                console.error("Init Error:", error);
+                hideLoading();
+                showError("認証エラーが発生しました。設定値やネットワークを確認してください。");
+            }
+        };
+
+        window.onload = initApp;
+
+    </script>
+</body>
+</html>
+
+
+```
