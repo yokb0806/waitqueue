@@ -220,7 +220,7 @@
             } catch(e) {}
         };
 
-        const playCallSound = () => {
+                const playCallSound = () => {
             try {
                 if (!globalAudioCtx) {
                     const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -230,40 +230,34 @@
                     globalAudioCtx.resume();
                 }
 
-                const audioCtx = globalAudioCtx;
-                const duration = 5.0; // 5秒間
-                const now = audioCtx.currentTime;
-                
-                const osc = audioCtx.createOscillator();
-                const gainNode = audioCtx.createGain();
-                
-                osc.type = 'square';
-                
-                // 5秒間続く注意を引くアラーム音（ピ・ポ・ピ・ポ...）
-                const beepLength = 0.25;
-                for (let i = 0; i < duration / beepLength; i++) {
-                    const time = now + i * beepLength;
-                    if (i % 2 === 0) {
-                        osc.frequency.setValueAtTime(880, time); // A5
-                    } else {
-                        osc.frequency.setValueAtTime(659.25, time); // E5
-                    }
-                    gainNode.gain.setValueAtTime(0, time);
-                    gainNode.gain.linearRampToValueAtTime(0.1, time + 0.05);
-                    gainNode.gain.setValueAtTime(0.1, time + beepLength - 0.05);
-                    gainNode.gain.linearRampToValueAtTime(0, time + beepLength);
-                }
+                const ctx = globalAudioCtx;
+                const now = ctx.currentTime;
 
-                osc.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-                
-                osc.start(now);
-                osc.stop(now + duration);
+                const playNote = (freq, time, delay) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'triangle'; // 柔らかい音色（三角波）
+                    osc.frequency.setValueAtTime(freq, time + delay);
+                    
+                    gain.gain.setValueAtTime(0, time + delay);
+                    gain.gain.linearRampToValueAtTime(0.2, time + delay + 0.2); // ゆっくり立ち上げ
+                    gain.gain.exponentialRampToValueAtTime(0.001, time + delay + 2.5); // 2.5秒かけて優しく消える
+                    
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(time + delay);
+                    osc.stop(time + delay + 2.5);
+                };
+
+                // 優しく響く和音を2段階で鳴らす（合計約5秒間）
+                [523.25, 659.25, 783.99].forEach((f, i) => playNote(f, now, i * 0.8));
+                [659.25, 783.99, 1046.50].forEach((f, i) => playNote(f, now, 2.5 + i * 0.8));
 
             } catch(e) {
                 console.error("Audio playback failed", e);
             }
         };
+
 
         const showNotification = (title, body) => {
             if ("Notification" in window && Notification.permission === "granted") {
