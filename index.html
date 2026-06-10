@@ -115,7 +115,7 @@
                         <p class="text-6xl font-black text-blue-600 my-4 tracking-tighter"><span id="my-queue-position">0</span><span class="text-2xl text-blue-800 ml-1">人</span></p>
                         <p class="text-sm text-gray-600 font-bold">お待ちです</p>
                     </div>
-                    <p class="text-sm text-gray-500 mt-6 leading-relaxed">順番が来ると音と通知でお知らせします。<br>画面を閉じずにお待ちください。</p>
+                    <p class="text-sm text-gray-500 mt-6 leading-relaxed">順番が来ると音と通知でお知らせします。<br>マナーモードを解除し、画面を閉じずにお待ちください。</p>
                 </div>
 
                 <div id="status-called" class="hidden py-8 blink-bg rounded-2xl border-4 border-red-200 relative">
@@ -198,44 +198,68 @@
             return d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false });
         };
 
+        let globalAudioCtx = null;
+        
+        const initAudio = () => {
+            try {
+                if (!globalAudioCtx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    globalAudioCtx = new AudioContext();
+                }
+                if (globalAudioCtx.state === 'suspended') {
+                    globalAudioCtx.resume();
+                }
+                // 無音を再生してオーディオコンテキストをアクティブにする
+                const osc = globalAudioCtx.createOscillator();
+                const gain = globalAudioCtx.createGain();
+                gain.gain.value = 0;
+                osc.connect(gain);
+                gain.connect(globalAudioCtx.destination);
+                osc.start();
+                osc.stop(globalAudioCtx.currentTime + 0.1);
+            } catch(e) {}
+        };
+
         const playCallSound = () => {
             try {
-                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                
-                const playChime = (startTime) => {
-                    const osc1 = audioCtx.createOscillator();
-                    const osc2 = audioCtx.createOscillator();
-                    const gain1 = audioCtx.createGain();
-                    const gain2 = audioCtx.createGain();
-                    
-                    osc1.type = 'sine';
-                    osc2.type = 'sine';
-                    
-                    osc1.frequency.setValueAtTime(783.99, startTime);
-                    osc2.frequency.setValueAtTime(659.25, startTime + 0.4);
-                    
-                    gain1.gain.setValueAtTime(0, startTime);
-                    gain1.gain.linearRampToValueAtTime(0.1, startTime + 0.05);
-                    gain1.gain.exponentialRampToValueAtTime(0.001, startTime + 0.4);
-                    
-                    gain2.gain.setValueAtTime(0, startTime + 0.4);
-                    gain2.gain.linearRampToValueAtTime(0.1, startTime + 0.45);
-                    gain2.gain.exponentialRampToValueAtTime(0.001, startTime + 1.0);
-                    
-                    osc1.connect(gain1);
-                    gain1.connect(audioCtx.destination);
-                    osc2.connect(gain2);
-                    gain2.connect(audioCtx.destination);
-                    
-                    osc1.start(startTime);
-                    osc1.stop(startTime + 0.4);
-                    osc2.start(startTime + 0.4);
-                    osc2.stop(startTime + 1.0);
-                };
-
-                for(let i = 0; i < 5; i++) {
-                    playChime(audioCtx.currentTime + i * 1.0);
+                if (!globalAudioCtx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    globalAudioCtx = new AudioContext();
                 }
+                if (globalAudioCtx.state === 'suspended') {
+                    globalAudioCtx.resume();
+                }
+
+                const audioCtx = globalAudioCtx;
+                const duration = 5.0; // 5秒間
+                const now = audioCtx.currentTime;
+                
+                const osc = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                
+                osc.type = 'square';
+                
+                // 5秒間続く注意を引くアラーム音（ピ・ポ・ピ・ポ...）
+                const beepLength = 0.25;
+                for (let i = 0; i < duration / beepLength; i++) {
+                    const time = now + i * beepLength;
+                    if (i % 2 === 0) {
+                        osc.frequency.setValueAtTime(880, time); // A5
+                    } else {
+                        osc.frequency.setValueAtTime(659.25, time); // E5
+                    }
+                    gainNode.gain.setValueAtTime(0, time);
+                    gainNode.gain.linearRampToValueAtTime(0.1, time + 0.05);
+                    gainNode.gain.setValueAtTime(0.1, time + beepLength - 0.05);
+                    gainNode.gain.linearRampToValueAtTime(0, time + beepLength);
+                }
+
+                osc.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                
+                osc.start(now);
+                osc.stop(now + duration);
+
             } catch(e) {
                 console.error("Audio playback failed", e);
             }
@@ -306,6 +330,7 @@
             try { localStorage.removeItem(`myTicketId_${state.storeId}`); } catch(e){}
             document.getElementById('customer-name').value = '';
             document.getElementById('customer-phone').value = '';
+            initAudio();
             renderView();
         };
 
@@ -314,6 +339,7 @@
             if (!auth.currentUser || !state.storeId) return;
 
             requestNotificationPermission();
+            initAudio(); // お客様が操作したタイミングでAudioコンテキストを初期化・アンロック
             
             const nameInput = document.getElementById('customer-name').value.trim();
             const phoneInput = document.getElementById('customer-phone').value.trim();
@@ -438,7 +464,6 @@
 
             if (paramStoreId && paramView === 'customer') {
                 backToHomeWrapper.classList.add('hidden');
-                requestNotificationPermission();
             } else {
                 backToHomeWrapper.classList.remove('hidden');
             }
@@ -555,6 +580,8 @@
             }
         };
 
+        window.addEventListener('click', initAudio, { once: true });
+        window.addEventListener('touchstart', initAudio, { once: true });
         window.onload = initApp;
 
     </script>
