@@ -120,11 +120,14 @@
                         <p class="text-6xl font-black text-blue-600 my-4 tracking-tighter"><span id="my-queue-position">0</span><span class="text-2xl text-blue-800 ml-1">人</span></p>
                         <p class="text-sm text-gray-600 font-bold">お待ちです</p>
                     </div>
-                    <p class="text-sm text-gray-500 mt-6 leading-relaxed">順番が来るとこの画面でお知らせします。<br>画面を閉じずにお待ちください。</p>
+                    <p class="text-sm text-gray-500 mt-6 leading-relaxed">順番が来ると音と通知でお知らせします。<br>画面を閉じずにお待ちください。</p>
                 </div>
 
-                <div id="status-called" class="hidden py-8 blink-bg rounded-2xl border-4 border-red-200">
-                    <h3 class="text-3xl font-black text-red-700 mb-6 leading-tight">お客さまの順番に<br>なりました。</h3>
+                <div id="status-called" class="hidden py-8 blink-bg rounded-2xl border-4 border-red-200 relative">
+                    <div class="absolute top-2 right-4 text-red-600 font-bold text-sm bg-white/60 px-2 py-1 rounded">
+                        呼出時刻: <span id="my-called-time">--:--</span>
+                    </div>
+                    <h3 class="text-3xl font-black text-red-700 mb-6 leading-tight mt-4">お客さまの順番に<br>なりました。</h3>
                     <p class="text-xl font-bold text-gray-800 bg-white/80 inline-block px-4 py-2 rounded-lg">資生堂コーナーに<br>お越しください。</p>
                 </div>
 
@@ -140,7 +143,6 @@
                 </div>
             </div>
             
-            <!-- お客様がアクセスした場合には、タブレットに戻るテストボタンを非表示化 -->
             <div id="back-to-home-wrapper" class="text-center pb-8 hidden">
                 <button onclick="backToHome()" class="text-gray-400 text-xs underline">（テスト用）タブレット画面に戻る</button>
             </div>
@@ -191,7 +193,53 @@
             storeId: null,
             queue: [],
             myTicketId: null,
+            myLastStatus: null,
             isReady: false
+        };
+
+        const formatTime = (ts) => {
+            if (!ts) return '--:--';
+            const d = new Date(ts);
+            return d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false });
+        };
+
+        const playCallSound = () => {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                oscillator.type = 'sine';
+                // チャイム音風
+                oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
+                oscillator.frequency.setValueAtTime(1108.73, audioCtx.currentTime + 0.3); // C#6
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 1.0);
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 1.0);
+            } catch(e) {
+                console.error("Audio playback failed", e);
+            }
+        };
+
+        const showNotification = (title, body) => {
+            if ("Notification" in window && Notification.permission === "granted") {
+                try {
+                    new Notification(title, { body: body });
+                } catch(e) {
+                    // Mobile Safari fallback
+                    navigator.serviceWorker.ready.then(registration => {
+                        registration.showNotification(title, { body: body });
+                    }).catch(err => console.error(err));
+                }
+            }
+        };
+
+        const requestNotificationPermission = () => {
+            if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
+                Notification.requestPermission();
+            }
         };
 
         window.changeView = (viewName) => {
@@ -203,7 +251,6 @@
             if(!auth || !db) return alert("データベースが初期化されていません。リロードしてください。");
             const input = document.getElementById('store-id-input').value.trim();
             
-            // 半角英数字6桁の正規表現チェック
             const alphanumericRegex = /^[A-Za-z0-9]{6}$/;
             if (!input || !alphanumericRegex.test(input)) {
                 return alert("店舗コードは半角英数字6桁で入力してください。");
@@ -238,6 +285,7 @@
 
         window.resetCustomerSession = () => {
             state.myTicketId = null;
+            state.myLastStatus = null;
             try { localStorage.removeItem(`myTicketId_${state.storeId}`); } catch(e){}
             document.getElementById('customer-name').value = '';
             document.getElementById('customer-phone').value = '';
@@ -247,6 +295,8 @@
         window.submitTicket = async (e) => {
             e.preventDefault();
             if (!auth.currentUser || !state.storeId) return;
+
+            requestNotificationPermission();
             
             const nameInput = document.getElementById('customer-name').value.trim();
             const phoneInput = document.getElementById('customer-phone').value.trim();
@@ -263,11 +313,12 @@
                     createdAt: Date.now()
                 });
                 state.myTicketId = docRef.id;
+                state.myLastStatus = 'waiting';
                 try { localStorage.setItem(`myTicketId_${state.storeId}`, docRef.id); } catch(err){}
                 renderView();
             } catch (error) {
                 console.error(error);
-                alert(`保存エラー: ${error.message} (Firestoreのセキュリティルールを確認してください)`);
+                alert(`保存エラー: ${error.message}`);
             } finally {
                 hideLoading();
             }
@@ -279,7 +330,10 @@
             try {
                 const docPath = db.collection(`queue_${state.storeId}`).doc(id);
                 if (currentStatus === 'waiting') {
-                    await docPath.update({ status: 'called' });
+                    await docPath.update({ 
+                        status: 'called',
+                        calledAt: Date.now() 
+                    });
                 } else if (currentStatus === 'called') {
                     await docPath.update({ status: 'completed' });
                 }
@@ -292,7 +346,6 @@
         };
 
         const renderView = () => {
-            // お客様によるパラメータアクセス時には、不正遷移を防ぐため厳格にガード
             if (paramStoreId && paramView === 'customer' && state.view !== 'customer') {
                 state.view = 'customer';
             }
@@ -347,10 +400,10 @@
                             </div>
                             <div class="text-sm text-gray-500 font-medium">連絡先: ${escapeHtml(q.phone) || 'なし'}</div>
                         </div>
-                        <div class="ml-4">
+                        <div class="ml-4 text-right">
                             ${q.status === 'waiting' ? 
-                                '<div class="text-blue-600 bg-blue-100 px-3 py-2 rounded-lg font-bold text-sm">呼出する ＞</div>' : 
-                                '<div class="text-gray-600 bg-gray-200 px-3 py-2 rounded-lg font-bold text-sm border border-gray-300">完了して消す ＞</div>'
+                                '<div class="text-blue-600 bg-blue-100 px-3 py-2 rounded-lg font-bold text-sm inline-block">呼出する ＞</div>' : 
+                                `<div class="text-xs text-red-600 font-bold mb-1">呼出時刻: ${formatTime(q.calledAt)}</div><div class="text-gray-600 bg-gray-200 px-3 py-2 rounded-lg font-bold text-sm border border-gray-300 inline-block">完了して消す ＞</div>`
                             }
                         </div>
                     </div>
@@ -362,11 +415,11 @@
         const renderCustomerView = () => {
             const formSection = document.getElementById('customer-form-section');
             const statusSection = document.getElementById('customer-status-section');
-
-            // お客様のアクセス時にはテスト用戻るボタンを完全に隠蔽
             const backToHomeWrapper = document.getElementById('back-to-home-wrapper');
+
             if (paramStoreId && paramView === 'customer') {
                 backToHomeWrapper.classList.add('hidden');
+                requestNotificationPermission();
             } else {
                 backToHomeWrapper.classList.remove('hidden');
             }
@@ -392,6 +445,7 @@
 
                 if (!myDoc) {
                     document.getElementById('status-completed').classList.remove('hidden');
+                    state.myLastStatus = null;
                     return;
                 }
 
@@ -403,6 +457,7 @@
                 } 
                 else if (myDoc.status === 'called') {
                     document.getElementById('status-called').classList.remove('hidden');
+                    document.getElementById('my-called-time').innerText = formatTime(myDoc.calledAt);
                 }
                 else if (myDoc.status === 'completed') {
                     document.getElementById('status-completed').classList.remove('hidden');
@@ -425,13 +480,27 @@
 
             unsubQueue = db.collection(`queue_${state.storeId}`).onSnapshot((snapshot) => {
                 state.queue = [];
+                let myDocCurrent = null;
+                
                 snapshot.forEach(docSnap => {
                     const data = docSnap.data();
                     if (data.status !== 'completed' || docSnap.id === state.myTicketId) {
                         state.queue.push({ id: docSnap.id, ...data });
                     }
+                    if (docSnap.id === state.myTicketId) {
+                        myDocCurrent = data;
+                    }
                 });
                 state.queue.sort((a, b) => a.createdAt - b.createdAt);
+
+                // 通知と音のトリガー
+                if (state.myTicketId && myDocCurrent) {
+                    if (state.myLastStatus === 'waiting' && myDocCurrent.status === 'called') {
+                        playCallSound();
+                        showNotification("ご案内のお知らせ", "お客さまの順番になりました。資生堂コーナーにお越しください。");
+                    }
+                    state.myLastStatus = myDocCurrent.status;
+                }
                 
                 document.getElementById('error-banner').classList.add('hidden');
                 if(state.isReady) renderView();
