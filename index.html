@@ -240,7 +240,7 @@
                     osc.frequency.setValueAtTime(freq, time + delay);
                     
                     gain.gain.setValueAtTime(0, time + delay);
-                    gain.gain.linearRampToValueAtTime(0.2, time + delay + 0.2); // ゆっくり立ち上げ
+                    gain.gain.linearRampToValueAtTime(0.3, time + delay + 0.2); // ゆっくり立ち上げ
                     gain.gain.exponentialRampToValueAtTime(0.001, time + delay + 2.5); // 2.5秒かけて優しく消える
                     
                     osc.connect(gain);
