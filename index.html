@@ -219,7 +219,7 @@
             } catch(e) {}
         };
 
-        const playCallSound = () => {
+               const playCallSound = () => {
             try {
                 if (!globalAudioCtx) {
                     const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -239,7 +239,7 @@
                     osc.frequency.setValueAtTime(freq, time + delay);
                     
                     gain.gain.setValueAtTime(0, time + delay);
-                    // 音量設定 0.24 (2割増)
+                    // 音量設定を 0.2 から 0.24 に変更（2割増）
                     gain.gain.linearRampToValueAtTime(0.24, time + delay + 0.2); 
                     gain.gain.exponentialRampToValueAtTime(0.001, time + delay + 2.5); 
                     
@@ -256,6 +256,7 @@
                 console.error("Audio playback failed", e);
             }
         };
+
 
 
         const showNotification = (title, body) => {
